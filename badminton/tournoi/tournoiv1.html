@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>Générateur de matchs badminton</title>
+  <style>
+    body { font-family: Arial, sans-serif; padding: 20px; line-height: 1.6; max-width: 800px; margin: auto; }
+    .section { margin-bottom: 20px; padding: 15px; border: 1px solid #ddd; border-radius: 8px; background: #fcfcfc; }
+    .player-row { display: flex; gap: 10px; margin-bottom: 8px; align-items: center; }
+    input, button, select { padding: 6px; border-radius: 4px; border: 1px solid #ccc; }
+    button { cursor: pointer; background-color: #f0f0f0; }
+    button.primary { background-color: #28a745; color: white; border: none; padding: 10px 20px; font-weight: bold; }
+    .match { margin: 5px 0; padding: 8px; background: #fff; border: 1px solid #eee; border-left: 4px solid #007bff; }
+    .round { margin-top: 15px; padding: 10px; border: 1px solid #ccc; border-radius: 5px; background: #f1f1f1; }
+    .round-title { font-weight: bold; margin-bottom: 8px; color: #333; }
+    .error { color: #dc3545; font-weight: bold; padding: 10px; border: 1px solid #dc3545; border-radius: 4px; }
+    #setupSection, #playerSection, #actionSection { display: block; }
+    .hidden { display: none !important; }
+  </style>
+</head>
+<body>
+
+<h2>Générateur de matchs (Badminton)</h2>
+
+<div id="setupSection" class="section">
+  <label>Nombre de joueurs (pair) :</label>
+  <input type="number" id="numPlayers" min="2" step="2" value="4">
+  <button onclick="preparePlayerInputs()">Saisir les noms</button>
+</div>
+
+<div id="playerSection" class="section hidden">
+  <h3>Attribution des noms et groupes</h3>
+  <div id="playerList"></div>
+  <p style="font-size: 0.9em; color: #666;">Note : L'équilibrage F/M sera respecté automatiquement selon vos choix.</p>
+</div>
+
+<div id="actionSection" class="section hidden">
+  <button class="primary" onclick="generate()">Générer le tournoi</button>
+</div>
+
+<div id="output"></div>
+
+<script>
+// --- Logique d'interface ---
+
+function preparePlayerInputs() {
+  const n = parseInt(document.getElementById('numPlayers').value);
+  const container = document.getElementById('playerList');
+  const output = document.getElementById('output');
+  
+  if (!n || n < 2 || n % 2 !== 0) {
+    alert("Veuillez entrer un nombre pair valide (2, 4, 6...).");
+    return;
+  }
+
+  container.innerHTML = '';
+  output.innerHTML = '';
+
+  for (let i = 0; i < n; i++) {
+    const div = document.createElement('div');
+    div.className = 'player-row';
+    div.innerHTML = `
+      <span>${i + 1}.</span>
+      <input type="text" class="playerName" placeholder="Nom du joueur" value="Joueur ${i+1}">
+      <select class="playerGroup">
+        <option value="random">Aléatoire</option>
+        <option value="F">Groupe F</option>
+        <option value="M">Groupe M</option>
+      </select>
+    `;
+    container.appendChild(div);
+  }
+
+  // Affichage des sections suivantes
+  document.getElementById('playerSection').classList.remove('hidden');
+  document.getElementById('actionSection').classList.remove('hidden');
+}
+
+function generate() {
+  const output = document.getElementById('output');
+  output.innerHTML = '';
+
+  const rows = document.querySelectorAll('.player-row');
+  const playersData = Array.from(rows).map(row => ({
+    name: row.querySelector('.playerName').value.trim() || "Anonyme",
+    group: row.querySelector('.playerGroup').value
+  }));
+
+  const N = playersData.length;
+  const half = N / 2;
+
+  // Répartition F / M
+  let groupF = [];
+  let groupM = [];
+  let randoms = [];
+
+  playersData.forEach(p => {
+    if (p.group === 'F') groupF.push(p.name);
+    else if (p.group === 'M') groupM.push(p.name);
+    else randoms.push(p.name);
+  });
+
+  if (groupF.length > half || groupM.length > half) {
+    output.innerHTML = `<p class="error">Erreur : Trop de joueurs assignés à un groupe (max ${half} pour F et ${half} pour M).</p>`;
+    return;
+  }
+
+  // On complète les groupes avec les joueurs "aléatoires"
+  function shuffle(array) {
+    for (let i = array.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [array[i], array[j]] = [array[j], array[i]];
+    }
+  }
+
+  shuffle(randoms);
+  while (groupF.length < half) groupF.push(randoms.pop());
+  while (groupM.length < half) groupM.push(randoms.pop());
+
+  const nameMapping = {};
+  groupF.forEach((name, i) => nameMapping['F' + (i + 1)] = name);
+  groupM.forEach((name, i) => nameMapping['M' + (i + 1)] = name);
+
+  // ==========================================
+  // ALGORITHME DE GÉNÉRATION (INCHANGÉ)
+  // ==========================================
+  const F = Array.from({length: half}, (_, i) => 'F' + (i + 1));
+  const M = Array.from({length: half}, (_, i) => 'M' + (i + 1));
+
+  const matches = [];
+  const usedPartners = new Set();
+
+  for (let i = 0; i < half; i++) {
+    for (let j = i + 1; j < half; j++) {
+      const f1 = F[i]; const f2 = F[j];
+      const m1 = M[i]; const m2 = M[j];
+      const options = [[`${f1}-${m1}`, `${f2}-${m2}`], [`${f1}-${m2}`, `${f2}-${m1}`]];
+      let placed = false;
+      for (let [t1, t2] of options) {
+        if (!usedPartners.has(t1) && !usedPartners.has(t2)) {
+          matches.push({ teamA: t1, teamB: t2 });
+          usedPartners.add(t1); usedPartners.add(t2);
+          placed = true; break;
+        }
+      }
+      if (!placed) {
+        output.innerHTML = 'Impossible de générer les matchs avec ces contraintes.';
+        return;
+      }
+    }
+  }
+
+  function canPlace(match, round) {
+    const players = new Set();
+    round.forEach(m => {
+      m.teamA.split('-').forEach(p => players.add(p));
+      m.teamB.split('-').forEach(p => players.add(p));
+    });
+    return ![...match.teamA.split('-'), ...match.teamB.split('-')].some(p => players.has(p));
+  }
+
+  function buildSchedule(matchesInput) {
+    const matches = [...matchesInput];
+    const playerCount = {};
+    matches.forEach(m => {
+      [...m.teamA.split('-'), ...m.teamB.split('-')].forEach(p => {
+        playerCount[p] = (playerCount[p] || 0) + 1;
+      });
+    });
+    matches.sort((a, b) => {
+      const score = m => [...m.teamA.split('-'), ...m.teamB.split('-')].reduce((sum, p) => sum + playerCount[p], 0);
+      return score(b) - score(a);
+    });
+    shuffle(matches);
+    const rounds = [];
+    matches.forEach(match => {
+      let bestRound = null; let bestSize = -1;
+      rounds.forEach(round => {
+        if (canPlace(match, round) && round.length > bestSize) {
+          bestRound = round; bestSize = round.length;
+        }
+      });
+      if (bestRound) bestRound.push(match); else rounds.push([match]);
+    });
+    return rounds;
+  }
+
+  let bestSchedule = null;
+  let bestScore = Infinity;
+  const ITERATIONS = 500;
+
+  for (let i = 0; i < ITERATIONS; i++) {
+    const candidate = buildSchedule(matches);
+    const roundsCount = candidate.length;
+    const sizes = candidate.map(r => r.length);
+    const score = roundsCount * 1000 + (Math.max(...sizes) - Math.min(...sizes));
+
+    if (score < bestScore) {
+      bestScore = score;
+      bestSchedule = candidate;
+    }
+    const lowerBound = Math.ceil(matches.length / half);
+    if (candidate.length === lowerBound && (Math.max(...sizes) - Math.min(...sizes)) <= 1) {
+      bestSchedule = candidate; break;
+    }
+  }
+
+  function rebalance(schedule) {
+    let improved = true;
+    while (improved) {
+      improved = false;
+      schedule.sort((a,b)=>b.length - a.length);
+      const biggest = schedule[0]; const smallest = schedule[schedule.length-1];
+      for (let i = 0; i < biggest.length; i++) {
+        const match = biggest[i];
+        if (canPlace(match, smallest)) {
+          smallest.push(match); biggest.splice(i,1);
+          improved = true; break;
+        }
+      }
+    }
+    return schedule;
+  }
+
+  bestSchedule = rebalance(bestSchedule);
+
+  // --- AFFICHAGE FINAL ---
+
+  output.innerHTML = '<h3>Planning généré :</h3>';
+  bestSchedule.forEach((round, idx) => {
+    const divRound = document.createElement('div');
+    divRound.className = 'round';
+    divRound.innerHTML = `<div class="round-title">Tour ${idx + 1}</div>`;
+
+    round.forEach(m => {
+      const pA = m.teamA.split('-').map(id => nameMapping[id]).join(' & ');
+      const pB = m.teamB.split('-').map(id => nameMapping[id]).join(' & ');
+      const divMatch = document.createElement('div');
+      divMatch.className = 'match';
+      divMatch.textContent = `${pA} vs ${pB}`;
+      divRound.appendChild(divMatch);
+    });
+    output.appendChild(divRound);
+  });
+}
+</script>
+
+</body>
+</html>
