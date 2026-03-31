@@ -13,6 +13,7 @@
     .primary { background-color: #28a745; color: white; border: none; }
     .secondary { background-color: #6c757d; color: white; border: none; }
     .danger { background-color: #dc3545; color: white; border: none; }
+    .light { background-color: #f8f9fa; color: #333; border: 1px solid #ccc; }
     
     .summary-box { background-color: #e9ecef; padding: 15px; border-radius: 8px; margin-bottom: 20px; border-left: 5px solid #6c757d; }
     .summary-box h4 { margin-top: 0; color: #495057; }
@@ -42,11 +43,30 @@
 
     .hidden { display: none !important; }
     .actions-footer { text-align: center; margin: 40px 0; display: flex; justify-content: center; gap: 10px; }
+    .import-export-zone { margin-top: 15px; padding-top: 15px; border-top: 1px dashed #ccc; display: flex; gap: 10px; }
+
+    /* Style du lien sponsor */
+    .sponsor-link { 
+        font-size: 0.6em; 
+        font-weight: normal; 
+        color: #666; 
+        margin-left: 15px; 
+        vertical-align: middle; 
+    }
+    .sponsor-link a { 
+        color: #62d0c3; 
+        text-decoration: none; 
+        font-weight: bold; 
+    }
+    .sponsor-link a:hover { text-decoration: underline; }
   </style>
 </head>
 <body>
 
-<h2>Badminton Manager</h2>
+<h2>
+    Badminton Manager 
+    <span class="sponsor-link">(sponsorisé par <a href="https://bloogreen.fr" target="_blank">Bloogreen</a>)</span>
+</h2>
 
 <div id="setupSection" class="section">
   <h3>Configuration</h3>
@@ -57,27 +77,31 @@
     <div><label>Pts Nul :</label><br><input type="number" id="ptsDraw" value="1"></div>
   </div>
   <br>
-  <button class="primary" onclick="preparePlayerInputs()">Suivant : Noms des joueurs</button>
+  <div style="display: flex; gap: 10px; align-items: center;">
+    <button class="primary" onclick="preparePlayerInputs()">Suivant : Noms des joueurs</button>
+    <button class="light" onclick="document.getElementById('importFile').click()">Importer une liste (.txt)</button>
+    <input type="file" id="importFile" class="hidden" accept=".txt" onchange="importNames(this)">
+  </div>
 </div>
 
 <div id="playerSection" class="section hidden">
   <h3>Joueurs & Groupes</h3>
   <div id="playerList"></div>
-  <button class="primary" onclick="generateTournament()">Lancer la génération</button>
+  <div class="import-export-zone">
+    <button class="primary" onclick="generateTournament()">Lancer la génération</button>
+    <button class="light" onclick="exportNames()">Exporter les noms</button>
+  </div>
 </div>
 
 <div id="tournamentSection" class="hidden">
   <div id="dataSummary" class="summary-box"></div>
-
   <div id="sessionsOutput"></div>
-
   <div class="section" style="margin-top: 30px; border-top: 4px solid #28a745;">
     <h3>Classement général</h3>
     <div id="rankingTable"></div>
   </div>
-
   <div class="actions-footer">
-    <button class="secondary" onclick="exportToCSV()">Exporter CSV</button>
+    <button class="secondary" onclick="exportToCSV()">Exporter Résultats (CSV)</button>
     <button class="danger" onclick="resetTournament()">Réinitialiser le tournoi</button>
   </div>
 </div>
@@ -104,24 +128,91 @@ function restoreUI() {
     updateRanking();
 }
 
-function preparePlayerInputs() {
-    const n = parseInt(document.getElementById('numPlayers').value);
-    if (!n || n % 2 !== 0) return alert("Pair uniquement.");
+function preparePlayerInputs(importedData = null) {
+    let n;
+    if (importedData) {
+        n = importedData.length;
+        document.getElementById('numPlayers').value = n;
+    } else {
+        n = parseInt(document.getElementById('numPlayers').value);
+    }
+
+    if (!n || n % 2 !== 0) return alert("Le nombre de joueurs doit être pair.");
+
     state.config = {
         numCourts: parseInt(document.getElementById('numCourts').value),
         ptsWin: parseInt(document.getElementById('ptsWin').value),
         ptsDraw: parseInt(document.getElementById('ptsDraw').value)
     };
+
     const container = document.getElementById('playerList');
     container.innerHTML = '';
     for (let i = 0; i < n; i++) {
-        container.innerHTML += `<div class="player-row"><span>${i+1}.</span><input type="text" class="p-name" value="Joueur ${i+1}"><select class="p-group"><option value="random">Aléatoire</option><option value="F">Groupe F</option><option value="M">Groupe M</option></select></div>`;
+        const defaultName = importedData ? importedData[i].name : `Joueur ${i+1}`;
+        const defaultGroup = importedData ? importedData[i].group : 'random';
+        
+        container.innerHTML += `
+            <div class="player-row">
+                <span>${i+1}.</span>
+                <input type="text" class="p-name" value="${defaultName}">
+                <select class="p-group">
+                    <option value="random" ${defaultGroup === 'random' ? 'selected' : ''}>Aléatoire</option>
+                    <option value="F" ${defaultGroup === 'F' ? 'selected' : ''}>Groupe F</option>
+                    <option value="M" ${defaultGroup === 'M' ? 'selected' : ''}>Groupe M</option>
+                </select>
+            </div>`;
     }
     document.getElementById('playerSection').classList.remove('hidden');
 }
 
+function exportNames() {
+    const rows = document.querySelectorAll('.player-row');
+    let text = "";
+    rows.forEach(row => {
+        const name = row.querySelector('.p-name').value.trim() || "Anonyme";
+        const groupVal = row.querySelector('.p-group').value;
+        const groupTag = (groupVal === 'random') ? '?' : groupVal;
+        text += `${name}:${groupTag}\n`;
+    });
+    
+    const blob = new Blob([text], { type: 'text/plain' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'liste_joueurs.txt';
+    a.click();
+}
+
+function importNames(input) {
+    const file = input.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        const content = e.target.result;
+        const lines = content.split(/\r?\n/).filter(l => l.trim() !== "");
+        if (lines.length % 2 !== 0) {
+            alert("Attention : Le fichier contient un nombre impair de joueurs (" + lines.length + ").");
+        }
+        
+        const importedData = lines.map(line => {
+            const parts = line.split(':');
+            const name = parts[0] ? parts[0].trim() : "Anonyme";
+            let group = 'random';
+            if (parts[1]) {
+                const g = parts[1].trim().toUpperCase();
+                if (g === 'F') group = 'F';
+                else if (g === 'M') group = 'M';
+            }
+            return { name, group };
+        });
+        
+        preparePlayerInputs(importedData);
+        input.value = ""; 
+    };
+    reader.readAsText(file);
+}
+
 // ========================================================
-// ALGORITHMES SANCTUARISÉS
+// ALGORITHMES SANCTUARISÉS (INCHANGÉS)
 // ========================================================
 function generateTournament() {
     const rows = document.querySelectorAll('.player-row');
@@ -321,7 +412,7 @@ function exportToCSV() {
     }));
     const a = document.createElement('a');
     a.href = 'data:text/csv;charset=utf-8,' + encodeURI(csv);
-    a.download = 'tournoi.csv'; a.click();
+    a.download = 'resultats_tournoi.csv'; a.click();
 }
 </script>
 </body>
