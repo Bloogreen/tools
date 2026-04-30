@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Score Multi-Jeux</title>
+    <style>
+        body { font-family: sans-serif; background-color: #f0f2f5; display: flex; flex-direction: column; align-items: center; padding: 5px; margin: 0; }
+        h2 { margin: 8px 0; font-size: 1.1rem; }
+        .controls { display: flex; flex-direction: column; align-items: center; gap: 8px; margin-bottom: 10px; }
+        .row { display: flex; gap: 5px; align-items: center; }
+        
+        .switch-base { display: flex; align-items: center; background: #ddd; border-radius: 20px; padding: 2px; cursor: pointer; }
+        .switch-opt { padding: 4px 12px; border-radius: 18px; font-size: 0.8rem; font-weight: bold; }
+        .active { background: #34495e; color: white; }
+
+        table { border-collapse: collapse; background: white; font-size: 0.8rem; width: 100%; max-width: 600px; }
+        th, td { border: 1px solid #bbb; padding: 4px 2px; text-align: center; }
+        th { background-color: #2c3e50; color: white; }
+        .manche-col { background-color: #eee; font-weight: bold; width: 40px; }
+        
+        /* Suppression des flèches sur les inputs number */
+        input::-webkit-outer-spin-button, input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+        input[type=number] { -moz-appearance: textfield; width: 32px; padding: 2px; border: 1px solid #ddd; text-align: center; font-size: 0.9rem; }
+        
+        .normal-cell { font-size: 0.75rem; white-space: nowrap; color: #666; }
+        .total-row { font-weight: bold; background-color: #d1d8e0; }
+        .res-val { color: #000; font-weight: bold; }
+        
+        .btn { padding: 5px 10px; cursor: pointer; border: none; border-radius: 3px; font-size: 0.8rem; }
+        .btn-add { background-color: #27ae60; color: white; }
+        .btn-reset { background-color: #7f8c8d; color: white; }
+        .btn-line { background-color: #2980b9; color: white; margin-top: 8px; }
+    </style>
+</head>
+<body>
+
+    <div class="controls">
+        <div class="switch-base" onclick="toggleMode()">
+            <div id="opt5" class="switch-opt active">5 Rois</div>
+            <div id="optN" class="switch-opt">Normal</div>
+        </div>
+        <div class="row">
+            <input type="text" id="playerName" placeholder="Nom" style="width:70px; padding:4px;">
+            <button class="btn btn-add" onclick="addPlayer()">+</button>
+            <button class="btn btn-reset" onclick="resetScores()">Reset</button>
+        </div>
+    </div>
+
+    <table id="scoreTable">
+        <thead><tr id="headerRow"></tr></thead>
+        <tbody id="scoreBody"></tbody>
+        <tfoot><tr id="totalRow" class="total-row"></tr></tfoot>
+    </table>
+
+    <button id="addLineBtn" class="btn btn-line" onclick="addNewLine()" style="display:none;">+ Ligne</button>
+
+    <script>
+        let mode = '5rois';
+        let players = [];
+        const rounds5Kings = ["3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K"];
+
+        function toggleMode() {
+            mode = (mode === '5rois') ? 'normal' : '5rois';
+            document.getElementById('opt5').classList.toggle('active');
+            document.getElementById('optN').classList.toggle('active');
+            document.getElementById('addLineBtn').style.display = (mode === 'normal') ? 'block' : 'none';
+            loadData();
+            render();
+        }
+
+        function loadData() {
+            const key = (mode === '5rois') ? 'fiveKingsPlayers' : 'normalPlayers';
+            players = JSON.parse(localStorage.getItem(key)) || [];
+        }
+
+        function saveData() {
+            const key = (mode === '5rois') ? 'fiveKingsPlayers' : 'normalPlayers';
+            localStorage.setItem(key, JSON.stringify(players));
+        }
+
+        function render() {
+            const header = document.getElementById('headerRow');
+            const body = document.getElementById('scoreBody');
+            const footer = document.getElementById('totalRow');
+
+            header.innerHTML = '<th class="manche-col">T.</th>';
+            footer.innerHTML = '<td class="manche-col">TOT</td>';
+            body.innerHTML = '';
+
+            players.forEach((p, i) => {
+                header.innerHTML += `<th>${p.name.substring(0, 5)}</th>`;
+                footer.innerHTML += `<td id="total-${i}">${p.total}</td>`;
+            });
+
+            const rowCount = (mode === '5rois') ? rounds5Kings.length : (players.length > 0 ? players[0].scores.length : 0);
+
+            for (let r = 0; r < rowCount; r++) {
+                let label = (mode === '5rois') ? rounds5Kings[r] : (r + 1);
+                let rowHtml = `<tr><td class="manche-col">${label}</td>`;
+                
+                players.forEach((p, pIdx) => {
+                    const val = (p.scores[r] !== undefined && p.scores[r] !== "") ? p.scores[r] : "";
+                    if (mode === 'normal' && r > 0) {
+                        rowHtml += `<td class="normal-cell">+ <input type="number" value="${val}" oninput="updateScore(${pIdx}, ${r}, this.value)"> = <span id="res-${pIdx}-${r}" class="res-val">0</span></td>`;
+                    } else {
+                        rowHtml += `<td><input type="number" value="${val}" oninput="updateScore(${pIdx}, ${r}, this.value)"></td>`;
+                    }
+                });
+                body.innerHTML += rowHtml + `</tr>`;
+            }
+            if(mode === 'normal') refreshAllCumuls();
+        }
+
+        function updateScore(pIdx, rIdx, val) {
+            players[pIdx].scores[rIdx] = val === "" ? "" : parseInt(val);
+            
+            // Calcul du total
+            players[pIdx].total = players[pIdx].scores.reduce((a, b) => a + (parseInt(b) || 0), 0);
+            document.getElementById(`total-${pIdx}`).innerText = players[pIdx].total;
+
+            if (mode === 'normal') {
+                refreshCumulsForPlayer(pIdx);
+            }
+            saveData();
+        }
+
+        function refreshCumulsForPlayer(pIdx) {
+            let runningTotal = 0;
+            players[pIdx].scores.forEach((score, rIdx) => {
+                runningTotal += (parseInt(score) || 0);
+                const span = document.getElementById(`res-${pIdx}-${rIdx}`);
+                if (span) span.innerText = runningTotal;
+            });
+        }
+
+        function refreshAllCumuls() {
+            players.forEach((_, pIdx) => refreshCumulsForPlayer(pIdx));
+        }
+
+        function addPlayer() {
+            const name = document.getElementById('playerName').value.trim();
+            if (!name) return;
+            const size = (mode === '5rois') ? 11 : (players.length > 0 ? players[0].scores.length : 1);
+            players.push({ name: name, scores: new Array(size).fill(""), total: 0 });
+            document.getElementById('playerName').value = "";
+            saveData();
+            render();
+        }
+
+        function addNewLine() {
+            if (players.length === 0) return;
+            players.forEach(p => p.scores.push(""));
+            saveData();
+            render();
+        }
+
+        function resetScores() {
+            if (confirm("Réinitialiser ?")) {
+                players = [];
+                saveData();
+                render();
+            }
+        }
+
+        loadData();
+        render();
+    </script>
+</body>
+</html>
