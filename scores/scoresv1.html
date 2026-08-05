@@ -9,16 +9,15 @@
         h2 { margin: 8px 0; font-size: 1.1rem; }
         .controls { display: flex; flex-direction: column; align-items: center; gap: 8px; margin-bottom: 10px; }
         .row { display: flex; gap: 5px; align-items: center; }
-        .rank-option { font-size: 0.8rem; display: flex; align-items: center; gap: 4px; }
         
         .switch-base { display: flex; align-items: center; background: #ddd; border-radius: 20px; padding: 2px; cursor: pointer; }
         .switch-opt { padding: 4px 12px; border-radius: 18px; font-size: 0.8rem; font-weight: bold; }
         .active { background: #34495e; color: white; }
 
         table { border-collapse: collapse; background: white; font-size: 0.8rem; width: 100%; max-width: 600px; }
-        th, td { border: 1px solid #bbb; padding: 4px 6px; text-align: center; white-space: nowrap; }
-        th { background-color: #2c3e50; color: white; min-width: 60px; }
-        .manche-col { background-color: #eee; font-weight: bold; width: 40px; min-width: auto; }
+        th, td { border: 1px solid #bbb; padding: 4px 2px; text-align: center; }
+        th { background-color: #2c3e50; color: white; }
+        .manche-col { background-color: #eee; font-weight: bold; width: 40px; }
         
         /* Suppression des flèches sur les inputs number */
         input::-webkit-outer-spin-button, input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
@@ -26,19 +25,10 @@
         
         .normal-cell { font-size: 0.75rem; white-space: nowrap; color: #666; }
         .total-row { font-weight: bold; background-color: #d1d8e0; }
-        .names-footer-row { background-color: #34495e; color: white; font-weight: bold; }
         .res-val { color: #000; font-weight: bold; }
         
-        /* Styles pour l'historique/parties archivées */
-        .archive-summary { background-color: #bdc3c7; font-weight: bold; color: #2c3e50; }
-        .btn-toggle { cursor: pointer; padding: 0 4px; font-weight: bold; }
-        .archived-row { display: none; background-color: #f8f9fa; }
-        .archived-row.open { display: table-row; }
-        .archived-row td { color: #7f8c8d; }
-
         .btn { padding: 5px 10px; cursor: pointer; border: none; border-radius: 3px; font-size: 0.8rem; }
         .btn-add { background-color: #27ae60; color: white; }
-        .btn-raz { background-color: #e67e22; color: white; }
         .btn-reset { background-color: #7f8c8d; color: white; }
         .btn-line { background-color: #2980b9; color: white; margin-top: 8px; }
     </style>
@@ -51,25 +41,16 @@
             <div id="optN" class="switch-opt">Normal</div>
         </div>
         <div class="row">
-            <label class="rank-option">
-                <input type="checkbox" id="lowScoreWins" onchange="updateRanks()"> Moins de pts = 1er
-            </label>
-        </div>
-        <div class="row">
             <input type="text" id="playerName" placeholder="Nom" style="width:70px; padding:4px;">
             <button class="btn btn-add" onclick="addPlayer()">+</button>
-            <button class="btn btn-raz" onclick="razScores()">RAZ scores</button>
-            <button class="btn btn-reset" onclick="resetScores()">Reset total</button>
+            <button class="btn btn-reset" onclick="resetScores()">Reset</button>
         </div>
     </div>
 
     <table id="scoreTable">
         <thead><tr id="headerRow"></tr></thead>
         <tbody id="scoreBody"></tbody>
-        <tfoot>
-            <tr id="totalRow" class="total-row"></tr>
-            <tr id="namesFooterRow" class="names-footer-row"></tr>
-        </tfoot>
+        <tfoot><tr id="totalRow" class="total-row"></tr></tfoot>
     </table>
 
     <button id="addLineBtn" class="btn btn-line" onclick="addNewLine()" style="display:none;">+ Ligne</button>
@@ -77,7 +58,6 @@
     <script>
         let mode = '5rois';
         let players = [];
-        let archives = []; // Stocke les parties archivées
         const rounds5Kings = ["3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K"];
 
         function toggleMode() {
@@ -91,59 +71,28 @@
 
         function loadData() {
             const key = (mode === '5rois') ? 'fiveKingsPlayers' : 'normalPlayers';
-            const keyArc = (mode === '5rois') ? 'fiveKingsArchives' : 'normalArchives';
             players = JSON.parse(localStorage.getItem(key)) || [];
-            archives = JSON.parse(localStorage.getItem(keyArc)) || [];
         }
 
         function saveData() {
             const key = (mode === '5rois') ? 'fiveKingsPlayers' : 'normalPlayers';
-            const keyArc = (mode === '5rois') ? 'fiveKingsArchives' : 'normalArchives';
             localStorage.setItem(key, JSON.stringify(players));
-            localStorage.setItem(keyArc, JSON.stringify(archives));
         }
 
         function render() {
             const header = document.getElementById('headerRow');
             const body = document.getElementById('scoreBody');
             const footer = document.getElementById('totalRow');
-            const namesFooter = document.getElementById('namesFooterRow');
 
             header.innerHTML = '<th class="manche-col">T.</th>';
             footer.innerHTML = '<td class="manche-col">TOT</td>';
-            namesFooter.innerHTML = '<td class="manche-col">Nom</td>';
             body.innerHTML = '';
 
             players.forEach((p, i) => {
-                header.innerHTML += `<th>${p.name}</th>`;
+                header.innerHTML += `<th>${p.name.substring(0, 5)}</th>`;
                 footer.innerHTML += `<td id="total-${i}">${p.total}</td>`;
-                namesFooter.innerHTML += `<td>${p.name}</td>`;
             });
 
-            // 1. Affichage de l'historique archivé (parties précédentes)
-            archives.forEach((arc, arcIdx) => {
-                // Ligne de résumé grisée
-                let summaryHtml = `<tr class="archive-summary">
-                    <td class="manche-col"><span class="btn-toggle" onclick="toggleArchive(${arcIdx})" id="arc-btn-${arcIdx}">+</span> P${arcIdx+1}</td>`;
-                players.forEach((_, pIdx) => {
-                    const score = arc.totals[pIdx] !== undefined ? arc.totals[pIdx] : 0;
-                    summaryHtml += `<td>${score}</td>`;
-                });
-                body.innerHTML += summaryHtml + `</tr>`;
-
-                // Lignes de détail archivées
-                arc.scoresRows.forEach((rowScores, rIdx) => {
-                    let label = (mode === '5rois') ? rounds5Kings[rIdx] : (rIdx + 1);
-                    let rowHtml = `<tr class="archived-row arc-${arcIdx}"><td class="manche-col">${label}</td>`;
-                    players.forEach((_, pIdx) => {
-                        const val = (rowScores[pIdx] !== undefined && rowScores[pIdx] !== "") ? rowScores[pIdx] : "";
-                        rowHtml += `<td>${val}</td>`;
-                    });
-                    body.innerHTML += rowHtml + `</tr>`;
-                });
-            });
-
-            // 2. Affichage de la partie en cours
             const rowCount = (mode === '5rois') ? rounds5Kings.length : (players.length > 0 ? players[0].scores.length : 0);
 
             for (let r = 0; r < rowCount; r++) {
@@ -161,47 +110,19 @@
                 body.innerHTML += rowHtml + `</tr>`;
             }
             if(mode === 'normal') refreshAllCumuls();
-            updateRanks();
-        }
-
-        function toggleArchive(arcIdx) {
-            const rows = document.querySelectorAll(`.arc-${arcIdx}`);
-            const btn = document.getElementById(`arc-btn-${arcIdx}`);
-            let isOpen = false;
-            rows.forEach(r => {
-                r.classList.toggle('open');
-                if (r.classList.contains('open')) isOpen = true;
-            });
-            if (btn) btn.innerText = isOpen ? '-' : '+';
         }
 
         function updateScore(pIdx, rIdx, val) {
             players[pIdx].scores[rIdx] = val === "" ? "" : parseInt(val);
             
-            // Calcul du total de la partie en cours
+            // Calcul du total
             players[pIdx].total = players[pIdx].scores.reduce((a, b) => a + (parseInt(b) || 0), 0);
+            document.getElementById(`total-${pIdx}`).innerText = players[pIdx].total;
 
             if (mode === 'normal') {
                 refreshCumulsForPlayer(pIdx);
             }
-            updateRanks();
             saveData();
-        }
-
-        function updateRanks() {
-            if (players.length === 0) return;
-            const lowScoreWins = document.getElementById('lowScoreWins').checked;
-            
-            const sortedTotals = players.map(p => p.total).sort((a, b) => lowScoreWins ? a - b : b - a);
-
-            players.forEach((p, pIdx) => {
-                const rank = sortedTotals.indexOf(p.total) + 1;
-                const rankSuffix = rank === 1 ? '1er' : `${rank}e`;
-                const cell = document.getElementById(`total-${pIdx}`);
-                if (cell) {
-                    cell.innerText = `${p.total} (${rankSuffix})`;
-                }
-            });
         }
 
         function refreshCumulsForPlayer(pIdx) {
@@ -234,40 +155,9 @@
             render();
         }
 
-        function razScores() {
-            if (players.length === 0) return;
-            if (!confirm("Archiver la partie actuelle et recommencer à zéro ?")) return;
-
-            const rowCount = (mode === '5rois') ? rounds5Kings.length : players[0].scores.length;
-            let scoresRows = [];
-
-            // Extraire la matrice des scores par ligne/manche
-            for (let r = 0; r < rowCount; r++) {
-                let row = players.map(p => p.scores[r]);
-                scoresRows.push(row);
-            }
-
-            // Enregistrer l'archive
-            archives.push({
-                totals: players.map(p => p.total),
-                scoresRows: scoresRows
-            });
-
-            // Réinitialiser les scores de la partie en cours
-            const size = (mode === '5rois') ? 11 : 1;
-            players.forEach(p => {
-                p.scores = new Array(size).fill("");
-                p.total = 0;
-            });
-
-            saveData();
-            render();
-        }
-
         function resetScores() {
-            if (confirm("Réinitialiser totalement la partie et supprimer l'historique ?")) {
+            if (confirm("Réinitialiser ?")) {
                 players = [];
-                archives = [];
                 saveData();
                 render();
             }
